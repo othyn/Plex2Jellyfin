@@ -2,10 +2,12 @@ import requests
 import socket
 import json
 from urllib.parse import urlencode
+from progress.bar import Bar
 import os
 import signal
 import sys
 import time
+import math
 
 token_file = '.jellyfin_token'
 
@@ -258,12 +260,26 @@ class Jellyfin:
         return None
 
     def addToPlaylist(self, playlistId, itemIds):
-        item_list = ','.join(itemIds)
-        cmd = f'/Playlists/{playlistId}/Items'
-        params = f'Ids={item_list}&UserId={self.user_id}'
-        res = self._post_request(cmd=cmd, params=params)
+        batch_size = 50
+        batches = math.ceil(len(itemIds) / batch_size)
+
+        bar = Bar(f'Adding {len(itemIds)} Plex items to Jellyfin in batches of {batch_size}', max=batches)
+
+        for i in range(batches):
+            start_index = i * batch_size
+            end_index = min((i + 1) * batch_size, len(itemIds))
+            item_list = ','.join(itemIds[start_index:end_index])
+            cmd = f'/Playlists/{playlistId}/Items'
+            params = f'Ids={item_list}&UserId={self.user_id}'
+            res = self._post_request(cmd=cmd, params=params)
+            if not res:
+                print('Failed to add playlist batch to Jellyfin')
+            bar.next()
+        bar.finish()
+
         if res:
             return True
+
         return False
 
     def statsCustomQuery(self, query):
